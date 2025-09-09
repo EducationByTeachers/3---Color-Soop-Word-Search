@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Color Soop Word Search</title>
+    
+    <style>
+        :root {
+            /* Colores Originales */
+            --amarillo: #FFEB3B;
+            --azul: #2196F3;
+            --rojo: #F44336;
+            --blanco: #E0E0E0; /* Un blanco visible sobre fondo blanco */
+            --negro: #212121;
+            --verde: #4CAF50;
+
+            /* === NUEVOS COLORES AÑADIDOS === */
+            --gris: #9E9E9E;
+            --naranja: #FF9800;
+            --purpura: #9C27B0;
+            --rosado: #FFB6C1;
+            --marron: #795548;
+
+            /* Colores de la UI */
+            --fondo: #f4f7f6;
+            --borde-letra: #dcdcdc;
+            --letra-seleccionada: #fca311;
+        }
+
+        @keyframes confeti-fall {
+            0% { transform: translateY(-100vh) rotateZ(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotateZ(360deg); opacity: 0; }
+        }
+
+        body {
+            font-family: 'Verdana', sans-serif;
+            background-color: var(--fondo);
+            color: #333;
+            text-align: center;
+            margin: 0;
+            padding: 1rem;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        h1 {
+            color: #2c3e50;
+            font-size: clamp(1.8em, 5vw, 2.5em);
+            margin-bottom: 0.5rem;
+        }
+
+        .instructions {
+            font-size: clamp(1em, 3vw, 1.1em);
+            color: #555;
+            margin: 0 0 1.5rem 0;
+        }
+
+        #start-btn {
+            padding: 0.8em 1.5em;
+            font-size: clamp(1.2em, 4vw, 1.5em);
+            font-weight: bold;
+            color: white;
+            background-color: var(--verde);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+        }
+
+        #start-screen { display: block; }
+        #game-screen { display: none; }
+        
+        #color-references {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .ref-box {
+            width: 25px;
+            height: 25px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            transition: transform 0.3s, border 0.3s;
+        }
+        .ref-box.found {
+            border: 3px solid gold;
+            transform: scale(1.2);
+        }
+
+        #word-search-grid {
+            display: grid;
+            /* === AJUSTADO PARA LA NUEVA CUADRÍCULA === */
+            grid-template-columns: repeat(12, 1fr);
+            gap: 2px;
+            background-color: #ccc;
+            border: 3px solid #ccc;
+            -webkit-user-select: none; /* Safari */
+            -ms-user-select: none; /* IE 10+ */
+            user-select: none; /* Standard syntax */
+        }
+
+        .letter-cell {
+            background-color: white;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: clamp(0.7em, 2.5vw, 1em); /* Letra un poco más pequeña */
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .letter-cell.selected {
+            background-color: var(--letra-seleccionada);
+            color: white;
+        }
+
+        .letter-cell.found {
+            transition: color 0.5s, transform 0.3s;
+            transform: scale(1.1);
+        }
+
+        .message-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 1000;
+        }
+        .message-overlay .symbol {
+            font-size: clamp(150px, 30vw, 250px);
+            font-weight: bold;
+            line-height: 1;
+            color: var(--verde);
+        }
+        .message-overlay .message-text {
+            font-size: clamp(30px, 8vw, 60px);
+            color: white;
+            font-weight: bold;
+        }
+        
+        #confetti-container {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+        }
+        .confeti {
+            position: absolute;
+            width: 10px; height: 10px;
+            opacity: 0;
+            animation: confeti-fall 3s ease-in forwards;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="confetti-container"></div>
+
+    <div class="main-container">
+        <div id="start-screen">
+            <h1>Color Soop Word Search</h1>
+            <p class="instructions">Find the Spanish color names in the puzzle. Click and drag to select a word!</p>
+            <button id="start-btn">Start Game</button>
+        </div>
+
+        <div id="game-screen">
+            <div id="color-references"></div>
+            <div id="word-search-grid"></div>
+        </div>
+    </div>
+    
+    <div id="win-message" class="message-overlay">
+        <div class="symbol">✓</div>
+        <div class="message-text">You Win!</div>
+    </div>
+
+    <script>
+        const startScreen = document.getElementById('start-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const startBtn = document.getElementById('start-btn');
+        const gridElement = document.getElementById('word-search-grid');
+        const referencesElement = document.getElementById('color-references');
+        const winMessage = document.getElementById('win-message');
+        const confettiContainer = document.getElementById('confetti-container');
+
+        // === TAMAÑO DE CUADRÍCULA AUMENTADO ===
+        const GRID_SIZE = 12;
+
+        // === LISTA DE PALABRAS ACTUALIZADA ===
+        const words = [
+            { text: 'ROJO', color: 'var(--rojo)', found: false },
+            { text: 'AZUL', color: 'var(--azul)', found: false },
+            { text: 'VERDE', color: 'var(--verde)', found: false },
+            { text: 'AMARILLO', color: 'var(--amarillo)', found: false },
+            { text: 'NEGRO', color: 'var(--negro)', found: false },
+            { text: 'BLANCO', color: 'var(--blanco)', found: false },
+            { text: 'GRIS', color: 'var(--gris)', found: false },
+            { text: 'NARANJA', color: 'var(--naranja)', found: false },
+            { text: 'PURPURA', color: 'var(--purpura)', found: false },
+            { text: 'ROSADO', color: 'var(--rosado)', found: false },
+            { text: 'MARRON', color: 'var(--marron)', found: false },
+        ];
+        
+        // === LISTA DE HEX DE COLORES ACTUALIZADA ===
+        const coloresHex = { 
+            '--rojo': '#F44336', '--azul': '#2196F3', '--verde': '#4CAF50', 
+            '--amarillo': '#FFEB3B', '--negro': '#212121', '--blanco': '#FFFFFF',
+            '--gris': '#9E9E9E', '--naranja': '#FF9800', '--purpura': '#9C27B0',
+            '--rosado': '#E91E63', '--marron': '#795548'
+        };
+
+        let grid = [];
+        let isSelecting = false;
+        let selection = [];
+
+        function init() {
+            startBtn.addEventListener('click', startGame);
+        }
+
+        function startGame() {
+            startScreen.style.display = 'none';
+            gameScreen.style.display = 'block';
+            words.forEach(w => w.found = false);
+            setupGame();
+        }
+
+        function setupGame() {
+            gridElement.innerHTML = '';
+            grid = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
+
+            placeWordsInGrid();
+            fillGridWithRandomLetters();
+            renderGrid();
+            renderReferences();
+        }
+        
+        function placeWordsInGrid() {
+            const directions = [[0, 1], [1, 0]]; // Horizontal y Vertical
+            words.forEach(wordObj => {
+                let placed = false;
+                let attempts = 0; // Prevenir bucles infinitos
+                while (!placed && attempts < 100) {
+                    const dir = directions[Math.floor(Math.random() * directions.length)];
+                    const row = Math.floor(Math.random() * GRID_SIZE);
+                    const col = Math.floor(Math.random() * GRID_SIZE);
+
+                    if (canPlaceWord(wordObj.text, row, col, dir)) {
+                        for (let i = 0; i < wordObj.text.length; i++) {
+                            const r = row + i * dir[0];
+                            const c = col + i * dir[1];
+                            grid[r][c] = { letter: wordObj.text[i], word: wordObj.text };
+                        }
+                        placed = true;
+                    }
+                    attempts++;
+                }
+                if (!placed) {
+                    console.warn(`Could not place word: ${wordObj.text}`);
+                }
+            });
+        }
+
+        function canPlaceWord(word, row, col, dir) {
+            for (let i = 0; i < word.length; i++) {
+                const r = row + i * dir[0];
+                const c = col + i * dir[1];
+                if (r >= GRID_SIZE || c >= GRID_SIZE || (grid[r][c] && grid[r][c].letter !== word[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function fillGridWithRandomLetters() {
+            const alphabet = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    if (!grid[r][c]) {
+                        grid[r][c] = { letter: alphabet[Math.floor(Math.random() * alphabet.length)] };
+                    }
+                }
+            }
+        }
+        
+        function renderGrid() {
+            for (let r = 0; r < GRID_SIZE; r++) {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.classList.add('letter-cell');
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.textContent = grid[r][c].letter;
+                    gridElement.appendChild(cell);
+                }
+            }
+        }
+        
+        function renderReferences() {
+            referencesElement.innerHTML = '';
+            words.forEach(wordObj => {
+                const refBox = document.createElement('div');
+                refBox.classList.add('ref-box');
+                refBox.style.backgroundColor = wordObj.color;
+                if(wordObj.found) refBox.classList.add('found');
+                referencesElement.appendChild(refBox);
+            });
+        }
+        
+        // --- Lógica de Selección ---
+        gridElement.addEventListener('mousedown', startSelection);
+        gridElement.addEventListener('mouseover', continueSelection);
+        document.addEventListener('mouseup', endSelection);
+
+        function startSelection(e) {
+            if (e.target.classList.contains('letter-cell')) {
+                isSelecting = true;
+                selection = [e.target];
+                e.target.classList.add('selected');
+            }
+        }
+        
+        function continueSelection(e) {
+            if (isSelecting && e.target.classList.contains('letter-cell') && !selection.includes(e.target)) {
+                selection.push(e.target);
+                e.target.classList.add('selected');
+            }
+        }
+        
+        function endSelection() {
+            if (!isSelecting) return;
+            isSelecting = false;
+            
+            const selectedWord = selection.map(cell => cell.textContent).join('');
+            const selectedWordReversed = selectedWord.split('').reverse().join('');
+            
+            let foundMatch = false;
+            words.forEach(wordObj => {
+                if (!wordObj.found && (wordObj.text === selectedWord || wordObj.text === selectedWordReversed)) {
+                    wordObj.found = true;
+                    selection.forEach(cell => {
+                        cell.classList.add('found');
+                        cell.style.color = wordObj.color;
+                        cell.classList.remove('selected'); // Limpiar selección visual
+                    });
+                    foundMatch = true;
+                }
+            });
+
+            if (!foundMatch) {
+                selection.forEach(cell => cell.classList.remove('selected'));
+            }
+            
+            selection = [];
+            renderReferences();
+            checkWinCondition();
+        }
+        
+        function checkWinCondition() {
+            const allFound = words.every(w => w.found);
+            if (allFound) {
+                showWin();
+            }
+        }
+        
+        function showWin() {
+            setTimeout(() => {
+                winMessage.style.display = 'flex';
+                launchConfetti();
+                setTimeout(() => {
+                    winMessage.style.display = 'none';
+                    startScreen.style.display = 'block';
+                    gameScreen.style.display = 'none';
+                }, 4000);
+            }, 500); // Pequeña pausa antes de mostrar la pantalla de victoria
+        }
+        
+        function launchConfetti() {
+            for (let i = 0; i < 150; i++) {
+                const confeti = document.createElement('div');
+                confeti.classList.add('confeti');
+                const colorVar = words[Math.floor(Math.random() * words.length)].color;
+                // Usamos el objeto coloresHex para obtener el color real para el confeti
+                confeti.style.backgroundColor = coloresHex[colorVar]; 
+                confeti.style.left = Math.random() * 100 + 'vw';
+                confeti.style.animationDelay = Math.random() * 2 + 's';
+                confeti.style.transform = `scale(${Math.random() * 0.8 + 0.5})`;
+                confeti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
+                confettiContainer.appendChild(confeti);
+                setTimeout(() => confeti.remove(), 4000);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
